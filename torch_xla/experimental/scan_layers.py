@@ -7,6 +7,24 @@ from functorch.compile import default_partition
 
 from torch_xla.experimental.scan import scan
 
+_ONE_LAYER_CACHE = {}
+
+
+def _create_one_layer_fn(first_layer: nn.Module):
+  # Use the first layer as the example/template layer.
+  from copy import deepcopy
+  example_layer = deepcopy(first_layer)
+
+  # Define the function to apply at each step
+  def one_layer_fn(carry, params_buffers):
+    # Apply the current layer's weights and biases to the example layer,
+    # then run the resulting layer.
+    output = torch.func.functional_call(  # type: ignore
+        example_layer, params_buffers, carry, strict=True)
+    return output, None
+
+  return one_layer_fn
+
 
 def scan_layers(layers: Iterable[torch.nn.Module],
                 input_data,
@@ -77,17 +95,9 @@ def scan_layers(layers: Iterable[torch.nn.Module],
   stacked_buffers = tree_map(lambda *tensors: torch.stack(tensors, dim=0),
                              *buffers_list)
 
-  # Use the first layer as the example/template layer.
-  from copy import deepcopy
-  example_layer = deepcopy(first_layer)
-
-  # Define the function to apply at each step
-  def one_layer(carry, params_buffers):
-    # Apply the current layer's weights and biases to the example layer,
-    # then run the resulting layer.
-    output = torch.func.functional_call(  # type: ignore
-        example_layer, params_buffers, carry, strict=True)
-    return output, None
+  if id(layers) not in _ONE_LAYER_CACHE:
+    _ONE_LAYER_CACHE[id(layers)] = _create_one_layer_fn(first_layer)
+  one_layer = _ONE_LAYER_CACHE[id(layers)]
 
   stacked_params_buffers = (stacked_params, stacked_buffers)
   final_carry, _ = scan(
