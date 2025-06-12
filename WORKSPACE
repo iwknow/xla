@@ -34,12 +34,17 @@ python_configure(
 
 ################################ PyTorch Setup ################################
 
-load("//bazel:dependencies.bzl", "PYTORCH_LOCAL_DIR")
+torch_version = "v2.7.1"
+torch_hash = '5befd2e540fd55ce4782d0ca7610ce5b572d756d7ea38090ef0f3c7c428fb20f'
 
-new_local_repository(
+http_archive(
     name = "torch",
     build_file = "//bazel:torch.BUILD",
-    path = PYTORCH_LOCAL_DIR,
+    sha256 = torch_hash,
+    strip_prefix = "pytorch-" + torch_version,
+    urls = [
+        "https://github.com/pytorch/pytorch/releases/download/" + torch_version + "/pytorch-" + torch_version + ".tar.gz",
+    ],
 )
 
 ############################# OpenXLA Setup ###############################
